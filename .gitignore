@@ -3,3 +3,5 @@ __pycache__
 .venv
 test
 old_app
+resume_library
+chroma_db
