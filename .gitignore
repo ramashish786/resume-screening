@@ -2,5 +2,5 @@
 __pycache__
 .venv
 test
-resume_library
-chroma_db
+resume_library/
+chroma_db/
