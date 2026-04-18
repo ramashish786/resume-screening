@@ -96,17 +96,20 @@ st.markdown("""
 
 def _init():
     defaults: dict[str, Any] = {
-        "session_id":          uuid.uuid4().hex[:12],
-        "agent_result":        None,
-        "is_running":          False,
-        "run_count":           0,
-        "weight_skills":       0.5,
-        "weight_experience":   0.3,
-        "weight_domain":       0.2,
-        "lib_selected":        set(),      # set of file_hashes selected for scoring
-        "_confirm_remove":     {},         # {file_hash: bool} — awaiting second click
-        "_confirm_clear":      False,      # global clear-all confirm
-        "_renaming":           {},         # {file_hash: bool}
+        "session_id":                 uuid.uuid4().hex[:12],
+        "agent_result":               None,
+        "is_running":                 False,
+        "run_count":                  0,
+        "weight_skills":              0.5,
+        "weight_experience":          0.3,
+        "weight_domain":              0.2,
+        "sb_selected":                set(),
+        "tab_selected":               set(),
+        "_confirm_remove":            {},
+        "_confirm_clear":             False,
+        "_sb_confirm_delete":         False,
+        "_tab_confirm_delete":        False,
+        "_renaming":                  {},
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -203,20 +206,52 @@ def _render_sidebar_library():
         )
         return
 
-    # Bulk selection
+    # Bulk selection + delete selected
     bc1, bc2 = st.columns(2)
     with bc1:
         if st.button("All", key="sel_all_sb", use_container_width=True):
-            st.session_state.lib_selected = {r["file_hash"] for r in resumes}
+            st.session_state.sb_selected = {r["file_hash"] for r in resumes}
+            for r in resumes:
+                st.session_state[f"sb_chk_{r['file_hash']}"] = True
             st.rerun()
     with bc2:
         if st.button("None", key="sel_none_sb", use_container_width=True):
-            st.session_state.lib_selected = set()
+            st.session_state.sb_selected = set()
+            for r in resumes:
+                st.session_state[f"sb_chk_{r['file_hash']}"] = False
             st.rerun()
 
-    sel_n = len(st.session_state.lib_selected)
+    sel_n = len(st.session_state.sb_selected)
     if sel_n:
-        st.caption(f"✓ {sel_n} selected for scoring")
+        st.caption(f"{sel_n} of {count} selected")
+        if st.button(
+            f"🗑️ Delete {sel_n} Selected",
+            key="del_selected_sb",
+            use_container_width=True,
+            type="primary",
+        ):
+            st.session_state._sb_confirm_delete = True
+            st.rerun()
+
+    # Confirm delete-selected dialog
+    if st.session_state.get("_sb_confirm_delete"):
+        st.warning(f"Delete **{sel_n}** selected resume(s)? This cannot be undone.")
+        cd1, cd2 = st.columns(2)
+        with cd1:
+            if st.button("Yes, delete", key="confirm_del_sel", type="primary", use_container_width=True):
+                hashes_to_delete = list(st.session_state.sb_selected)
+                for fh in hashes_to_delete:
+                    remove_resume(fh)
+                    st.session_state.pop(f"sb_chk_{fh}", None)
+                    st.session_state.tab_selected.discard(fh)
+                st.session_state.sb_selected = set()
+                st.session_state._sb_confirm_delete = False
+                st.toast(f"Deleted {len(hashes_to_delete)} resume(s)", icon="🗑️")
+                st.rerun()
+        with cd2:
+            if st.button("Cancel", key="cancel_del_sel", use_container_width=True):
+                st.session_state._sb_confirm_delete = False
+                st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -226,7 +261,7 @@ def _render_sidebar_library():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Clear-all
+    # Clear-all (danger zone)
     with st.expander("⚠️ Danger zone"):
         st.caption("Permanently removes all saved resumes.")
         if st.session_state._confirm_clear:
@@ -234,8 +269,13 @@ def _render_sidebar_library():
             ca, cb = st.columns(2)
             with ca:
                 if st.button("Yes, clear all", type="primary", use_container_width=True, key="do_clear"):
+                    # Pop all checkbox widget keys before clearing
+                    for r in resumes:
+                        st.session_state.pop(f"sb_chk_{r['file_hash']}", None)
+                        st.session_state.pop(f"tab_chk_{r['file_hash']}", None)
                     n = remove_all_resumes()
-                    st.session_state.lib_selected    = set()
+                    st.session_state.sb_selected     = set()
+                    st.session_state.tab_selected    = set()
                     st.session_state._confirm_clear  = False
                     st.toast(f"Removed {n} resume(s)", icon="✅")
                     st.rerun()
@@ -279,14 +319,14 @@ def _sidebar_resume_row(resume: dict):
 
     with c1:
         checked = st.checkbox(
-            "", value=fh in st.session_state.lib_selected,
+            "None", value=fh in st.session_state.sb_selected,
             key=f"sb_chk_{fh}", label_visibility="collapsed"
         )
-        if checked != (fh in st.session_state.lib_selected):
+        if checked != (fh in st.session_state.sb_selected):
             if checked:
-                st.session_state.lib_selected.add(fh)
+                st.session_state.sb_selected.add(fh)
             else:
-                st.session_state.lib_selected.discard(fh)
+                st.session_state.sb_selected.discard(fh)
             st.rerun()
 
     with c2:
@@ -307,8 +347,11 @@ def _sidebar_resume_row(resume: dict):
         if awaiting:
             if st.button("✓", key=f"sb_del_ok_{fh}", help="Confirm remove", type="primary"):
                 remove_resume(fh)
-                st.session_state.lib_selected.discard(fh)
+                st.session_state.sb_selected.discard(fh)
+                st.session_state.tab_selected.discard(fh)
                 st.session_state._confirm_remove.pop(fh, None)
+                st.session_state.pop(f"sb_chk_{fh}", None)
+                st.session_state.pop(f"tab_chk_{fh}", None)
                 st.toast(f"Removed: {name}", icon="🗑️")
                 st.rerun()
         else:
@@ -362,7 +405,7 @@ def render_upload_screen():
     st.divider()
 
     # Candidate preview
-    all_file_dicts = get_selected_file_dicts(list(st.session_state.lib_selected))
+    all_file_dicts = get_selected_file_dicts(list(st.session_state.tab_selected))
     _render_candidate_preview(all_file_dicts)
 
     # Score button
@@ -401,21 +444,25 @@ def _render_resume_sources():
             key="main_uploader",
         )
         if uploaded:
-            newly, dupes = [], []
+            newly_count = 0
+            existing_hashes_before = {r["file_hash"] for r in get_all_resumes()}
             for uf in uploaded:
                 raw   = uf.getvalue()
+                import hashlib as _hl
+                fh_check = _hl.sha256(raw).hexdigest()
+                is_new = fh_check not in existing_hashes_before
                 entry = add_resume(raw, uf.name)
                 fh    = entry["file_hash"]
-                st.session_state.lib_selected.add(fh)
-                # Was it truly new? Check if this was already in the registry
-                # before this upload (add_resume returns existing entry for dupes)
-                if entry.get("_just_added", True):  # all adds are "new" from user's perspective
-                    newly.append(entry)
+                st.session_state.tab_selected.add(fh)
+                if is_new:
+                    newly_count += 1
 
-            if newly:
+            if newly_count:
                 st.success(
-                    f"✅ {len(newly)} file(s) saved to your library and selected for scoring."
+                    f"✅ {newly_count} new file(s) saved to library and selected for scoring."
                 )
+            else:
+                st.info("ℹ️ All uploaded files were already in the library — selected for scoring.")
             for uf in uploaded:
                 size_kb = len(uf.getvalue()) / 1024
                 ext = Path(uf.name).suffix.upper().lstrip(".")
@@ -458,7 +505,7 @@ def _render_resume_sources():
                 ql = q.strip().lower()
                 filtered = [
                     r for r in resumes
-                    if ql in (r.get("candidate_name") or "").lower()
+                    if ql in (r.get("candidate_name") or "None").lower()
                     or ql in r["file_name"].lower()
                 ]
             if sort_opt == "Oldest first":
@@ -468,6 +515,22 @@ def _render_resume_sources():
                     filtered,
                     key=lambda r: (r.get("candidate_name") or r["file_name"]).lower()
                 )
+
+            # Bulk helpers — must render BEFORE checkboxes so setting their
+            # session_state keys doesn't conflict with already-rendered widgets
+            ba, bb = st.columns(2)
+            with ba:
+                if st.button("Select All", key="tab_all", use_container_width=True):
+                    for r in resumes:
+                        st.session_state.tab_selected.add(r["file_hash"])
+                        st.session_state[f"tab_chk_{r['file_hash']}"] = True
+                    st.rerun()
+            with bb:
+                if st.button("Clear All Selection", key="tab_none", use_container_width=True):
+                    st.session_state.tab_selected = set()
+                    for r in resumes:
+                        st.session_state[f"tab_chk_{r['file_hash']}"] = False
+                    st.rerun()
 
             if not filtered:
                 st.caption("No resumes match your filter.")
@@ -482,7 +545,7 @@ def _render_resume_sources():
                 for r in filtered:
                     fh   = r["file_hash"]
                     name = r.get("candidate_name") or r["file_name"]
-                    ext  = r.get("file_ext", "")
+                    ext  = r.get("file_ext", "None")
                     age  = format_age(r.get("added_at",""))
                     fname_short = (
                         r["file_name"][:22] + "…"
@@ -492,14 +555,14 @@ def _render_resume_sources():
                     rc1, rc2, rc3, rc4 = st.columns([0.07, 0.55, 0.22, 0.16])
                     with rc1:
                         checked = st.checkbox(
-                            "", value=fh in st.session_state.lib_selected,
+                            "None", value=fh in st.session_state.tab_selected,
                             key=f"tab_chk_{fh}", label_visibility="collapsed"
                         )
-                        if checked != (fh in st.session_state.lib_selected):
+                        if checked != (fh in st.session_state.tab_selected):
                             if checked:
-                                st.session_state.lib_selected.add(fh)
+                                st.session_state.tab_selected.add(fh)
                             else:
-                                st.session_state.lib_selected.discard(fh)
+                                st.session_state.tab_selected.discard(fh)
                             st.rerun()
                     with rc2:
                         st.markdown(
@@ -510,22 +573,6 @@ def _render_resume_sources():
                         st.caption(fname_short)
                     with rc4:
                         st.caption(age)
-
-            # Bulk helpers
-            ba, bb = st.columns(2)
-            with ba:
-                if st.button("Select All", key="tab_all", use_container_width=True):
-                    for r in resumes:
-                        st.session_state.lib_selected.add(r["file_hash"])
-                    st.rerun()
-            with bb:
-                if st.button("Clear Selection", key="tab_none", use_container_width=True):
-                    st.session_state.lib_selected = set()
-                    st.rerun()
-
-            n_sel = len(st.session_state.lib_selected)
-            if n_sel:
-                st.success(f"✓ {n_sel} candidate(s) selected")
 
 
 def _render_candidate_preview(file_dicts: list[dict]):
