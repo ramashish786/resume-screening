@@ -518,12 +518,17 @@ def _render_resume_sources():
 
             # Bulk helpers — must render BEFORE checkboxes so setting their
             # session_state keys doesn't conflict with already-rendered widgets
+            for r in resumes:
+             key = f"tab_chk_{r['file_hash']}"
+            if key not in st.session_state:
+                st.session_state[key] = r["file_hash"] in st.session_state.tab_selected
             ba, bb = st.columns(2)
             with ba:
                 if st.button("Select All", key="tab_all", use_container_width=True):
                     for r in resumes:
                         st.session_state.tab_selected.add(r["file_hash"])
                         st.session_state[f"tab_chk_{r['file_hash']}"] = True
+                    st.session_state.tab_selected = {r["file_hash"] for r in resumes}
                     st.rerun()
             with bb:
                 if st.button("Clear All Selection", key="tab_none", use_container_width=True):
