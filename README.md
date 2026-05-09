@@ -199,4 +199,7 @@ Weights are adjustable in the sidebar at runtime.
 ## Snaps Of UI
 ![alt text](console.jpg)
 ![alt text](aws_app.jpg)
+![alt text](image.png)
+![alt text](image-1.png)
+![alt text](image-2.png)
 
