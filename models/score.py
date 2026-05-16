@@ -27,7 +27,7 @@ class ResumeDocument(BaseModel):
     Produced by the File Parsing Node.
     """
 
-    candidate_name: str = Field("Unknown", description="Extracted or inferred name")
+    candidate_name: str = Field("Unknown", description="Extracted or inferred name"),
     raw_text: str = Field(..., description="Full extracted text from the resume")
     file_name: str = Field(..., description="Original upload filename")
     file_hash: str = Field(..., description="MD5 hash for deduplication")
@@ -37,6 +37,11 @@ class ResumeDocument(BaseModel):
         description="Non-fatal issues encountered during parsing",
     )
     word_count: int = Field(0, ge=0)
+
+    # Contact details
+    email: Optional[str] = Field(None, description="Email address extracted from resume")
+    phone: Optional[str] = Field(None, description="Phone number extracted from resume")
+    linkedin: Optional[str] = Field(None, description="LinkedIn profile URL or handle extracted from resume")
 
     @computed_field  # type: ignore[misc]
     @property
@@ -54,6 +59,8 @@ class CandidateScore(BaseModel):
     # Identity
     candidate_name: str
     file_name: str
+    email: Optional[str] = Field(None, description="Email address extracted from resume")
+    phone: Optional[str] = Field(None, description="Phone number extracted from resume")
 
     # Dimension scores (0–100)
     skills_score: float = Field(0.0, ge=0.0, le=100.0)
@@ -96,7 +103,7 @@ class CandidateScore(BaseModel):
         None, description="Set if scoring failed for this candidate"
     )
 
-    @computed_field  # type: ignore[misc]
+    @computed_field  
     @property
     def match_level(self) -> MatchLevel:
         s = self.overall_score
@@ -110,7 +117,7 @@ class CandidateScore(BaseModel):
             return MatchLevel.WEAK
         return MatchLevel.NO_MATCH
 
-    @computed_field  # type: ignore[misc]
+    @computed_field 
     @property
     def match_level_emoji(self) -> str:
         mapping = {
@@ -122,7 +129,7 @@ class CandidateScore(BaseModel):
         }
         return mapping[self.match_level]
 
-    @computed_field  # type: ignore[misc]
+    @computed_field 
     @property
     def needs_manual_review(self) -> bool:
         return self.confidence < 0.3 or self.error is not None

@@ -25,6 +25,49 @@ from models.score import ResumeDocument
 from parsers import is_duplicate, parse_resume
 
 
+# ── Contact detail extraction helpers ────────────────────────────────────────
+
+def _extract_email(text: str) -> str | None:
+    """Extract the first email address found in the resume text."""
+    match = re.search(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", text)
+    return match.group(0).lower() if match else None
+
+
+def _extract_phone(text: str) -> str | None:
+    """
+    Extract the first phone number found in the resume text.
+    Handles common formats: +91-9999999999, (123) 456-7890, 123.456.7890, etc.
+    """
+    match = re.search(
+        r"(\+?\d{1,3}[\s\-.]?)?(\(?\d{3}\)?[\s\-.]?)?\d{3}[\s\-.]?\d{4,}",
+        text,
+    )
+    if match:
+        number = re.sub(r"\s+", " ", match.group(0).strip())
+        # Ignore very short matches that are likely years or zip codes
+        digits = re.sub(r"\D", "", number)
+        if len(digits) >= 7:
+            return number
+    return None
+
+
+def _extract_linkedin(text: str) -> str | None:
+    """Extract a LinkedIn URL or handle from the resume text."""
+    # Full URL
+    match = re.search(
+        r"(?:https?://)?(?:www\.)?linkedin\.com/in/[a-zA-Z0-9_\-%.]+",
+        text,
+        re.IGNORECASE,
+    )
+    if match:
+        return match.group(0).rstrip("/")
+    # Bare handle: "linkedin: john-doe" or "in/john-doe"
+    match = re.search(r"linkedin[:\s]+([a-zA-Z0-9_\-%.]+)", text, re.IGNORECASE)
+    if match:
+        return f"linkedin.com/in/{match.group(1).strip()}"
+    return None
+
+
 # ── Candidate name extraction helpers ────────────────────────────────────────
 
 def _extract_candidate_name(text: str, file_name: str) -> str:
@@ -114,6 +157,9 @@ def file_parsing_node(state: dict[str, Any]) -> dict[str, Any]:
                 page_count=result["page_count"],
                 parse_warnings=result["warnings"],
                 word_count=result["word_count"],
+                email=_extract_email(result["raw_text"]),
+                phone=_extract_phone(result["raw_text"]),
+                linkedin=_extract_linkedin(result["raw_text"]),
             )
 
             if not doc.is_sufficient:

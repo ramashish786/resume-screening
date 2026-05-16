@@ -43,6 +43,7 @@ load_dotenv()
 
 from agent.graph import run_agent
 from config import settings
+from email_sender import draft_outreach_email, is_smtp_configured, send_email
 from models.score import CandidateScore, MatchLevel, RankedResult
 from resume_store import (
     add_resume,
@@ -110,6 +111,12 @@ def _init():
         "_sb_confirm_delete":         False,
         "_tab_confirm_delete":        False,
         "_renaming":                  {},
+        # Email signature
+        "sig_name":                   "",
+        "sig_position":               "",
+        "sig_company":                "",
+        "sig_phone":                  "",
+        "sig_email":                  "",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -126,6 +133,34 @@ def _badge(ext: str) -> str:
 
 def _pill(text: str, kind: str = "green") -> str:
     return f'<span class="pill-{kind}">{text}</span>'
+
+def _build_signature() -> str:
+    """Build the email sign-off block from sidebar session state values."""
+    name     = st.session_state.get("sig_name", "").strip()
+    position = st.session_state.get("sig_position", "").strip()
+    company  = st.session_state.get("sig_company", "").strip()
+    phone    = st.session_state.get("sig_phone", "").strip()
+    email    = st.session_state.get("sig_email", "").strip()
+
+    if not any([name, position, company, phone, email]):
+        return ""
+
+    lines = ["", "Best regards,"]
+    if name:
+        lines.append(name)
+
+    role_line = " | ".join(filter(None, [position, company]))
+    if role_line:
+        lines.append(role_line)
+
+    contact_line = " | ".join(filter(None, [
+        f"📞 {phone}" if phone else "",
+        f"✉️ {email}" if email else "",
+    ]))
+    if contact_line:
+        lines.append(contact_line)
+
+    return "\n".join(lines)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -155,6 +190,20 @@ def render_sidebar():
             st.warning(f"Weights sum to {total:.2f} — will be auto-normalised.")
         else:
             st.success("✓ Weights sum to 1.00")
+
+        st.divider()
+        st.markdown("### ✍️ Email Signature")
+        st.caption("Appended to every outgoing email as the sign-off.")
+        st.session_state.sig_name     = st.text_input("Your Name",     value=st.session_state.sig_name,     key="sb_sig_name",     placeholder="e.g. Jane Smith")
+        st.session_state.sig_position = st.text_input("Position",      value=st.session_state.sig_position, key="sb_sig_position", placeholder="e.g. Senior Recruiter")
+        st.session_state.sig_company  = st.text_input("Company",       value=st.session_state.sig_company,  key="sb_sig_company",  placeholder="e.g. Acme Corp")
+        st.session_state.sig_phone    = st.text_input("Phone",         value=st.session_state.sig_phone,    key="sb_sig_phone",    placeholder="e.g. +1-555-0100")
+        st.session_state.sig_email    = st.text_input("Contact Email", value=st.session_state.sig_email,    key="sb_sig_email",    placeholder="e.g. jane@acme.com")
+
+        sig_preview = _build_signature()
+        if sig_preview.strip():
+            st.markdown("**Preview:**")
+            st.code(sig_preview, language=None)
 
         st.divider()
         st.markdown("### 🤖 Model")
@@ -721,8 +770,9 @@ def render_results_screen(state: dict[str, Any]):
     _render_score_chart(ranked.candidates)
     st.divider()
     st.markdown("### 📊 Candidate Rankings")
+    rubric_text = ranked.rubric_used or ""
     for rank, c in enumerate(ranked.candidates, 1):
-        _render_candidate_card(rank, c)
+        _render_candidate_card(rank, c, rubric_text)
     st.divider()
 
     col1, col2, col3 = st.columns(3)
@@ -742,6 +792,8 @@ def render_results_screen(state: dict[str, Any]):
             file_name="resume_scores.csv", mime="text/csv",
             use_container_width=True,
         )
+
+    _render_send_all(ranked.candidates, rubric_text)
 
 
 def _render_score_chart(candidates: list[CandidateScore]):
@@ -774,7 +826,7 @@ def _render_score_chart(candidates: list[CandidateScore]):
     st.plotly_chart(fig, use_container_width=True)
 
 
-def _render_candidate_card(rank: int, c: CandidateScore):
+def _render_candidate_card(rank: int, c: CandidateScore, rubric_text: str = ""):
     badge = " 🔍 Manual review recommended" if c.needs_manual_review else ""
     with st.expander(
         f"{c.match_level_emoji} #{rank} — {c.candidate_name} — "
@@ -810,6 +862,16 @@ def _render_candidate_card(rank: int, c: CandidateScore):
                 st.markdown(" ".join(_pill(s,"red") for s in c.missing_skills), unsafe_allow_html=True)
 
         st.markdown("")
+        contact_parts = []
+        if c.email:
+            contact_parts.append(f"✉️ {c.email}")
+        if c.phone:
+            contact_parts.append(f"📞 {c.phone}")
+        if contact_parts:
+            st.markdown("**📇 Contact**")
+            st.markdown("&nbsp;&nbsp;|&nbsp;&nbsp;".join(contact_parts))
+            st.markdown("")
+
         if c.justification:
             st.markdown(f"**📝 Assessment:** {c.justification}")
 
@@ -830,12 +892,184 @@ def _render_candidate_card(rank: int, c: CandidateScore):
                     st.text(chunk[:600] + ("…" if len(chunk) > 600 else ""))
                     st.markdown("")
 
+        # ── Email compose ─────────────────────────────────────────────────
+        st.divider()
+        compose_key = f"compose_{c.file_name}"
+
+        if not st.session_state.get(compose_key):
+            btn_disabled = not c.email
+            btn_label    = "✉️ Send Email" if c.email else "✉️ Send Email (no address found)"
+            if st.button(btn_label, key=f"email_btn_{c.file_name}", disabled=btn_disabled):
+                st.session_state[compose_key] = True
+                st.rerun()
+        else:
+            st.markdown("**✉️ Compose Email**")
+
+            if not is_smtp_configured():
+                st.warning(
+                    "SMTP is not configured. Add `SMTP_USER` and `SMTP_PASSWORD` to your `.env` file.",
+                    icon="⚠️",
+                )
+
+            to_addr = st.text_input("To", value=c.email or "", key=f"email_to_{c.file_name}")
+
+            # Initialise widget state on first open (avoids value+key conflict in Streamlit 1.36+)
+            subj_key = f"email_subj_inp_{c.file_name}"
+            body_key = f"email_body_inp_{c.file_name}"
+            signature = _build_signature()
+            if subj_key not in st.session_state:
+                st.session_state[subj_key] = f"Exciting opportunity for {c.candidate_name}"
+            if body_key not in st.session_state:
+                st.session_state[body_key] = signature
+
+            draft_col, _ = st.columns([1, 3])
+            with draft_col:
+                if st.button("🪄 Draft with AI", key=f"email_draft_{c.file_name}"):
+                    with st.spinner("Drafting…"):
+                        try:
+                            subj, body = draft_outreach_email(c, rubric_text)
+                            st.session_state[subj_key] = subj
+                            st.session_state[body_key] = body + (f"\n{signature}" if signature else "")
+                        except Exception as e:
+                            st.error(f"Draft failed: {e}")
+                    st.rerun()
+
+            subject = st.text_input("Subject", key=subj_key)
+            body    = st.text_area("Body", key=body_key, height=180)
+
+            send_col, cancel_col, _ = st.columns([1, 1, 2])
+            with send_col:
+                if st.button(
+                    "📤 Send",
+                    key=f"email_send_{c.file_name}",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=not is_smtp_configured(),
+                ):
+                    if not to_addr:
+                        st.error("No recipient email address.")
+                    elif not body.strip():
+                        st.error("Email body cannot be empty.")
+                    else:
+                        try:
+                            send_email(to_addr, subject, body)
+                            st.toast(f"Email sent to {to_addr}!", icon="✅")
+                            st.session_state[compose_key] = False
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to send: {e}")
+            with cancel_col:
+                if st.button("Cancel", key=f"email_cancel_{c.file_name}", use_container_width=True):
+                    st.session_state[compose_key] = False
+                    st.rerun()
+
+
+def _render_send_all(candidates: list[CandidateScore], rubric_text: str):
+    """Bulk email panel — drafts a personalised email per candidate and sends all at once."""
+    reachable = [c for c in candidates if c.email]
+    if not reachable:
+        return
+
+    st.divider()
+    st.markdown("### 📨 Send to All Candidates")
+
+    # Summary of who will receive emails
+    no_email = [c for c in candidates if not c.email]
+    st.caption(
+        f"{len(reachable)} candidate(s) have an email address and will receive a personalised email. "
+        + (f"{len(no_email)} skipped (no email found)." if no_email else "")
+    )
+
+    if no_email:
+        with st.expander(f"⚠️ {len(no_email)} candidate(s) will be skipped"):
+            for c in no_email:
+                st.markdown(f"- **{c.candidate_name}** — no email address found in resume")
+
+    if not is_smtp_configured():
+        st.warning(
+            "SMTP is not configured. Add `SMTP_USER` and `SMTP_PASSWORD` to your `.env` file.",
+            icon="⚠️",
+        )
+        return
+
+    confirm_key = "_confirm_send_all"
+    results_key = "_send_all_results"
+
+    if not st.session_state.get(confirm_key):
+        if st.button(
+            f"📤 Send Personalised Email to {len(reachable)} Candidate(s)",
+            type="primary",
+            key="send_all_btn",
+        ):
+            st.session_state[confirm_key] = True
+            st.rerun()
+    else:
+        st.warning(
+            f"This will draft and send **{len(reachable)}** individual emails via GPT-4o. "
+            "Each email will include the candidate's name, score, matched skills, and the job requirement. "
+            "Continue?"
+        )
+        yes_col, no_col, _ = st.columns([1, 1, 3])
+        with yes_col:
+            if st.button("✅ Yes, Send All", type="primary", use_container_width=True, key="send_all_confirm"):
+                st.session_state[confirm_key] = False
+                _execute_send_all(reachable, rubric_text, results_key)
+        with no_col:
+            if st.button("Cancel", use_container_width=True, key="send_all_cancel"):
+                st.session_state[confirm_key] = False
+                st.rerun()
+
+    # Show results from a previous send-all run
+    results = st.session_state.get(results_key)
+    if results:
+        st.markdown("#### 📋 Send Results")
+        for name, email, status, detail in results:
+            if status == "sent":
+                st.success(f"✅ **{name}** → {email}")
+            else:
+                st.error(f"❌ **{name}** → {email} — {detail}")
+        if st.button("Clear Results", key="clear_send_results"):
+            st.session_state[results_key] = None
+            st.rerun()
+
+
+def _execute_send_all(candidates: list[CandidateScore], rubric_text: str, results_key: str):
+    """Draft and send one personalised email per candidate, with live progress."""
+    results = []
+    progress = st.progress(0, text="Preparing…")
+    total = len(candidates)
+
+    signature = _build_signature()
+
+    for i, c in enumerate(candidates):
+        progress.progress((i + 1) / total, text=f"Sending to {c.candidate_name}… ({i+1}/{total})")
+        try:
+            subject, body = draft_outreach_email(c, rubric_text)
+            if signature:
+                body = body + f"\n{signature}"
+            send_email(c.email, subject, body)
+            results.append((c.candidate_name, c.email, "sent", ""))
+        except Exception as e:
+            results.append((c.candidate_name, c.email, "failed", str(e)))
+
+    progress.empty()
+    st.session_state[results_key] = results
+    sent  = sum(1 for *_, s, _ in results if s == "sent")
+    failed = total - sent
+    if failed == 0:
+        st.toast(f"All {sent} emails sent successfully!", icon="✅")
+    else:
+        st.toast(f"{sent} sent, {failed} failed. See results below.", icon="⚠️")
+    st.rerun()
+
 
 def _results_df(candidates: list[CandidateScore]) -> pd.DataFrame:
     return pd.DataFrame([
         {
             "Rank":                   i,
             "Candidate":              c.candidate_name,
+            "Email":                  c.email or "",
+            "Phone":                  c.phone or "",
             "File":                   c.file_name,
             "Overall Score":          round(c.overall_score, 2),
             "Match Level":            c.match_level.value,

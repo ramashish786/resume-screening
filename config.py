@@ -48,6 +48,13 @@ class Settings(BaseSettings):
     # ── ChromaDB ────────────────────────────────────────────────────────
     chroma_persist_dir: str = Field("./chroma_db")
 
+    # ── Email (SMTP) ─────────────────────────────────────────────────────
+    smtp_host: str = Field("smtp.gmail.com", description="SMTP server hostname")
+    smtp_port: int = Field(587, description="SMTP port (587 for TLS)")
+    smtp_user: str = Field("", description="Sender email address")
+    smtp_password: str = Field("", description="SMTP password or app password")
+    smtp_from_name: str = Field("Resume Scoring Agent", description="Display name for outgoing emails")
+
     # ── Logging ─────────────────────────────────────────────────────────
     log_level: str = Field("INFO")
 

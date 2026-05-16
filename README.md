@@ -67,8 +67,9 @@ The app opens at `http://localhost:8501`.
 
 ```
 resume-agent/
-├── app.py                        # Streamlit UI (upload → run → results)
+├── app.py                        # Streamlit UI (upload → run → results → email)
 ├── config.py                     # Pydantic Settings (env-driven config)
+├── email_sender.py               # Email drafting (GPT-4o) and SMTP sending
 ├── requirements.txt
 ├── .env.example
 │
@@ -76,7 +77,7 @@ resume-agent/
 │   ├── graph.py                  # LangGraph StateGraph + run_agent()
 │   ├── state.py                  # AgentState TypedDict
 │   └── nodes/
-│       ├── parser.py             # Node 1: file parsing
+│       ├── parser.py             # Node 1: file parsing + contact extraction
 │       ├── indexer.py            # Node 2: LlamaIndex embedding + ChromaDB upsert
 │       ├── requirement.py        # Node 3: rubric extraction from free text
 │       ├── retriever.py          # Node 4: semantic retrieval per candidate
@@ -154,6 +155,11 @@ Weights are adjustable in the sidebar at runtime.
 | `MIN_SCORE_THRESHOLD` | `30` | Scores below this are flagged as "no match" |
 | `SCORING_RUNS` | `1` | Set to 3 for self-consistency averaging (prod) |
 | `CHROMA_PERSIST_DIR` | `./chroma_db` | Where ChromaDB stores its data |
+| `SMTP_HOST` | `smtp.gmail.com` | SMTP server hostname |
+| `SMTP_PORT` | `587` | SMTP port (587 for STARTTLS) |
+| `SMTP_USER` | — | Your sender email address |
+| `SMTP_PASSWORD` | — | SMTP password or app password |
+| `SMTP_FROM_NAME` | `Resume Scoring Agent` | Display name on outgoing emails |
 
 ---
 
@@ -183,6 +189,83 @@ Weights are adjustable in the sidebar at runtime.
    - GPT justification per candidate
    - Comparative summary across all candidates
    - Export to CSV
+5. Reach out to candidates directly from the results screen (see [Candidate Outreach via Email](#candidate-outreach-via-email))
+
+---
+
+## Candidate Outreach via Email
+
+After scoring, you can send personalised outreach emails to candidates without leaving the app. Emails are drafted by GPT-4o using each candidate's actual score, matched skills, and the job requirement — so every message is unique to that person.
+
+### Step 1 — Add SMTP credentials to `.env`
+
+```env
+SMTP_USER=you@gmail.com
+SMTP_PASSWORD=your-app-password
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+```
+
+> **Gmail users:** do not use your regular Gmail password. Go to **Google Account → Security → App Passwords** and generate a dedicated app password for this project.
+
+### Step 2 — Set up your email signature
+
+Open the app and scroll down the left sidebar to the **✍️ Email Signature** section. Fill in your:
+
+- Name
+- Position / job title
+- Company
+- Phone number
+- Contact email
+
+A live preview updates as you type. This signature is automatically appended to the bottom of every email you send — both individual and bulk.
+
+### Step 3 — Send emails
+
+There are two ways to send from the results screen:
+
+#### Send to one candidate
+
+Each candidate card has a **✉️ Send Email** button at the bottom. Click it and an inline compose form opens with:
+
+- The candidate's email address pre-filled (extracted from their resume)
+- Your signature already in the body
+
+Click **🪄 Draft with AI** to have GPT-4o write a personalised message referencing the candidate's score, matched skills, and the job requirement. You can edit the draft freely before hitting **📤 Send**.
+
+> The Send button is disabled if no email address was found in the candidate's resume.
+
+#### Send to all candidates at once
+
+Scroll below the candidate cards to the **📨 Send to All Candidates** section. It tells you exactly how many candidates have a valid email and lists anyone who will be skipped (no address found).
+
+Click **Send Personalised Email to X Candidates**, confirm the prompt, and the app will:
+
+1. Call GPT-4o to draft a unique email for each candidate
+2. Append your signature to each message
+3. Send all emails via SMTP, one by one
+4. Show a progress bar while sending
+
+A results summary appears when done, showing ✅ or ❌ for every candidate.
+
+### How the AI drafts each email
+
+The draft is tailored per candidate using:
+
+| Input | Example |
+|---|---|
+| Candidate name | Sarah Johnson |
+| Overall score | 84.5 / 100 |
+| Match level | strong |
+| Matched skills | Python, FastAPI, PostgreSQL |
+| Missing skills | Kubernetes |
+| Job requirement summary | Senior backend engineer, 5+ years… |
+
+A strong candidate gets an enthusiastic, specific message. A weaker candidate gets a more measured, neutral tone. The sign-off is always omitted from the AI draft — your configured signature is appended separately, keeping it consistent.
+
+### Contact detail extraction
+
+Email addresses and phone numbers are automatically extracted from each resume during parsing. If a candidate's email is missing from their resume, you can still open the compose form and type the address in manually.
 
 ---
 

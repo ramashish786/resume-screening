@@ -213,6 +213,8 @@ def scoring_node(state: dict[str, Any]) -> dict[str, Any]:
             score = CandidateScore(
                 candidate_name=doc.candidate_name,
                 file_name=doc.file_name,
+                email=doc.email,
+                phone=doc.phone,
                 skills_score=averaged.get("skills_score", 0.0),
                 experience_score=averaged.get("experience_score", 0.0),
                 domain_score=averaged.get("domain_score", 0.0),
@@ -244,6 +246,8 @@ def scoring_node(state: dict[str, Any]) -> dict[str, Any]:
                 CandidateScore(
                     candidate_name=doc.candidate_name,
                     file_name=doc.file_name,
+                    email=doc.email,
+                    phone=doc.phone,
                     overall_score=0.0,
                     confidence=0.0,
                     error=str(e),
