@@ -1,17 +1,3 @@
-"""
-agent/nodes/retriever.py
-─────────────────────────
-Semantic Retrieval Node.
-
-For each parsed candidate, embeds the scoring rubric query string and
-retrieves the top-k most relevant resume chunks from ChromaDB.
-
-Returns a dict mapping file_hash → list[chunk_text] for the Scoring Node.
-
-This node is designed to run BEFORE scoring so the scorer has rich
-evidence passages rather than operating on the full raw text blindly.
-"""
-
 from __future__ import annotations
 
 from typing import Any
@@ -26,7 +12,6 @@ from vector_store.chroma_client import query_collection
 
 
 def _embed_query(query: str) -> list[float]:
-    """Embed a single query string using OpenAI embeddings."""
     client = OpenAI(api_key=settings.openai_api_key)
     response = client.embeddings.create(
         model=settings.embedding_model,
@@ -36,14 +21,6 @@ def _embed_query(query: str) -> list[float]:
 
 
 def retrieval_node(state: dict[str, Any]) -> dict[str, Any]:
-    """
-    LangGraph node: retrieve top-k relevant chunks per candidate.
-
-    Input state keys:  parsed_documents, scoring_rubric, collection_name
-    Output state keys: retrieved_chunks_map, status
-
-    retrieved_chunks_map: dict[file_hash, list[str]]
-    """
     parsed_documents: list[ResumeDocument] = state.get("parsed_documents", [])
     rubric: ScoringRubric | None = state.get("scoring_rubric")
     collection_name: str = state.get("collection_name", "resumes_default")

@@ -1,27 +1,3 @@
-"""
-agent/graph.py
-───────────────
-LangGraph StateGraph definition for the Resume Scoring Agent.
-
-Pipeline:
-  START
-    → file_parsing        (parse uploaded files)
-    → indexing            (chunk + embed into ChromaDB)
-    → requirement_parsing (parse free-text job req into ScoringRubric)
-    → retrieval           (semantic retrieval of top-k chunks per candidate)
-    → scoring             (LLM-as-Judge scoring per candidate)
-    → ranking             (sort + aggregate + comparative summary)
-  END
-
-Conditional edge after file_parsing:
-  - If no documents were parsed successfully → END with fatal error
-  - Otherwise → indexing
-
-Conditional edge after requirement_parsing:
-  - If fatal_error is set → END
-  - Otherwise → retrieval
-"""
-
 from __future__ import annotations
 
 import uuid
@@ -41,10 +17,7 @@ from agent.nodes import (
 from agent.state import AgentState
 
 
-# ── Conditional edge functions ────────────────────────────────────────────────
-
 def route_after_parsing(state: AgentState) -> str:
-    """Route to indexing if at least one document was parsed, else END."""
     parsed = state.get("parsed_documents", [])
     fatal = state.get("fatal_error")
 
@@ -60,7 +33,6 @@ def route_after_parsing(state: AgentState) -> str:
 
 
 def route_after_rubric(state: AgentState) -> str:
-    """Route to retrieval if rubric is available, else END."""
     if state.get("fatal_error"):
         return END
     if state.get("scoring_rubric") is None:
@@ -69,20 +41,13 @@ def route_after_rubric(state: AgentState) -> str:
 
 
 def route_after_scoring(state: AgentState) -> str:
-    """Route to ranking if we have any scores, else END."""
     scores = state.get("candidate_scores", [])
     if not scores:
         return END
     return "ranking"
 
 
-# ── Graph builder ─────────────────────────────────────────────────────────────
-
 def build_graph() -> Any:
-    """
-    Construct and compile the LangGraph StateGraph.
-    Returns a compiled graph ready for .invoke() calls.
-    """
     graph = StateGraph(AgentState)
 
     # Register nodes
@@ -109,7 +74,6 @@ def build_graph() -> Any:
     # (requirement parsing doesn't depend on indexing being complete,
     #  but I have kept it sequential for simplicity)
     graph.add_edge("indexing", "requirement_parsing")
-
     graph.add_conditional_edges(
         "requirement_parsing",
         route_after_rubric,
@@ -135,24 +99,11 @@ def build_graph() -> Any:
     return graph.compile()
 
 
-# ── Public run function ───────────────────────────────────────────────────────
-
 def run_agent(
     uploaded_files: list[dict[str, Any]],
     user_requirement: str,
     session_id: str | None = None,
 ) -> AgentState:
-    """
-    Run the full resume scoring pipeline.
-
-    Args:
-        uploaded_files:   List of {"file_bytes": bytes, "file_name": str}
-        user_requirement: Free-text job requirement from the user
-        session_id:       Optional session identifier (auto-generated if None)
-
-    Returns:
-        Final AgentState with ranked_result populated.
-    """
     if session_id is None:
         session_id = uuid.uuid4().hex[:12]
 

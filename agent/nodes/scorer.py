@@ -1,19 +1,3 @@
-"""
-agent/nodes/scorer.py
-──────────────────────
-Scoring Node — the core intelligence of the pipeline.
-
-Uses GPT-4o as an expert HR evaluator ("LLM-as-Judge") to score each
-candidate against the structured rubric using their retrieved resume chunks
-as evidence.
-
-Output: one CandidateScore per candidate, with dimension scores,
-matched/missing skills, justification, and confidence.
-
-Self-consistency: if settings.scoring_runs > 1, the LLM is called multiple
-times and scores are averaged to reduce variance (recommended for production).
-"""
-
 from __future__ import annotations
 
 import json
@@ -29,8 +13,6 @@ from config import settings
 from models.rubric import ScoringRubric
 from models.score import CandidateScore, ResumeDocument
 
-
-# ── Scoring Prompt ────────────────────────────────────────────────────────────
 
 SCORING_SYSTEM = """You are a senior technical recruiter and hiring manager with 15 years of experience.
 You evaluate candidates objectively based on evidence found in their resumes.
@@ -81,8 +63,6 @@ Respond with this exact JSON structure:
 """
 
 
-# ── Single scoring call ───────────────────────────────────────────────────────
-
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=8),
@@ -93,10 +73,6 @@ def _score_once(
     candidate_name: str,
     resume_chunks: list[str],
 ) -> dict:
-    """
-    Call GPT-4o once and return raw score dict.
-    Decorated with tenacity retry for transient API errors.
-    """
     llm = ChatOpenAI(
         model=settings.llm_model,
         temperature=settings.llm_temperature,
@@ -137,7 +113,6 @@ def _score_once(
 
 
 def _average_scores(score_dicts: list[dict]) -> dict:
-    """Average numeric fields across multiple scoring runs for self-consistency."""
     if len(score_dicts) == 1:
         return score_dicts[0]
 
@@ -156,15 +131,7 @@ def _average_scores(score_dicts: list[dict]) -> dict:
     return result
 
 
-# ── Main node function ────────────────────────────────────────────────────────
-
 def scoring_node(state: dict[str, Any]) -> dict[str, Any]:
-    """
-    LangGraph node: score each candidate using LLM-as-Judge.
-
-    Input state keys:  parsed_documents, scoring_rubric, retrieved_chunks_map
-    Output state keys: candidate_scores, scoring_errors, status
-    """
     parsed_documents: list[ResumeDocument] = state.get("parsed_documents", [])
     rubric: ScoringRubric | None = state.get("scoring_rubric")
     retrieved_chunks_map: dict[str, list[str]] = state.get("retrieved_chunks_map", {})

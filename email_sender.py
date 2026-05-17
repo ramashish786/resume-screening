@@ -1,12 +1,3 @@
-"""
-email_sender.py
-────────────────
-Utilities for drafting and sending outreach emails to candidates.
-
-send_email      — sends via SMTP (smtplib, TLS)
-draft_outreach_email — uses GPT-4o to draft a personalised subject + body
-"""
-
 from __future__ import annotations
 
 import smtplib
@@ -20,18 +11,10 @@ from models.score import CandidateScore
 
 
 def is_smtp_configured() -> bool:
-    """Return True if SMTP credentials are present in config."""
     return bool(settings.smtp_user and settings.smtp_password)
 
 
 def send_email(to_address: str, subject: str, body: str) -> None:
-    """
-    Send a plain-text email to a single recipient via SMTP (STARTTLS).
-
-    Raises:
-        ValueError  — if SMTP credentials are missing in config.
-        smtplib.*   — on connection or authentication failure.
-    """
     if not is_smtp_configured():
         raise ValueError(
             "SMTP credentials not configured. "
@@ -57,12 +40,6 @@ def draft_outreach_email(
     candidate: CandidateScore,
     rubric_text: str,
 ) -> tuple[str, str]:
-    """
-    Ask GPT-4o to draft a short, personalised outreach email for a candidate.
-
-    Returns:
-        (subject, body) — both are plain strings ready to display/edit.
-    """
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_openai import ChatOpenAI
 

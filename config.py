@@ -1,11 +1,3 @@
-"""
-config.py
-─────────
-Centralised, type-safe configuration loaded from environment variables /
-.env file via Pydantic Settings.  Import `settings` everywhere — never
-read os.environ directly.
-"""
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -18,44 +10,28 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ── OpenAI ──────────────────────────────────────────────────────────
     openai_api_key: str = Field(..., description="OpenAI secret key")
 
-    # ── Model config ────────────────────────────────────────────────────
-    llm_model: str = Field("gpt-4o", description="Chat model for scoring & parsing")
-    embedding_model: str = Field(
-        "text-embedding-3-small", description="Embedding model for vector store"
-    )
+    llm_model: str = Field("gpt-4o")
+    embedding_model: str = Field("text-embedding-3-small")
     llm_temperature: float = Field(0.1, ge=0.0, le=1.0)
 
-    # ── Chunking ────────────────────────────────────────────────────────
     chunk_size: int = Field(512, gt=0)
     chunk_overlap: int = Field(50, ge=0)
     top_k_retrieval: int = Field(8, gt=0)
 
-    # ── Scoring ─────────────────────────────────────────────────────────
-    min_score_threshold: float = Field(
-        30.0, description="Scores below this are flagged as 'no match'"
-    )
-    min_confidence_threshold: float = Field(
-        0.3, description="Confidence below this triggers 'insufficient data' warning"
-    )
-    scoring_runs: int = Field(
-        1,
-        description="Number of independent scoring calls to average (set 3 for prod)",
-    )
+    min_score_threshold: float = Field(30.0)
+    min_confidence_threshold: float = Field(0.3)
+    scoring_runs: int = Field(1)  # set to 3 in prod for self-consistency averaging
 
-    # ── ChromaDB ────────────────────────────────────────────────────────
     chroma_persist_dir: str = Field("./chroma_db")
 
-    # ── Email (SMTP) ─────────────────────────────────────────────────────
-    smtp_host: str = Field("smtp.gmail.com", description="SMTP server hostname")
-    smtp_port: int = Field(587, description="SMTP port (587 for TLS)")
-    smtp_user: str = Field("", description="Sender email address")
-    smtp_password: str = Field("", description="SMTP password or app password")
-    smtp_from_name: str = Field("Resume Scoring Agent", description="Display name for outgoing emails")
+    smtp_host: str = Field("smtp.gmail.com")
+    smtp_port: int = Field(587)
+    smtp_user: str = Field("")
+    smtp_password: str = Field("")
+    smtp_from_name: str = Field("Resume Scoring Agent")
 
-    # ── Logging ─────────────────────────────────────────────────────────
     log_level: str = Field("INFO")
 
 

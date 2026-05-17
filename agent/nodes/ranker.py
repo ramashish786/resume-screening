@@ -1,15 +1,3 @@
-"""
-agent/nodes/ranker.py
-──────────────────────
-Ranking & Aggregation Node — the final step in the pipeline.
-
-Responsibilities:
-  1. Sort candidate scores by overall_score descending.
-  2. Apply configurable min_score_threshold to flag non-matches.
-  3. Generate a GPT-4o comparative summary narrative.
-  4. Build and return the final RankedResult object.
-"""
-
 from __future__ import annotations
 
 from typing import Any
@@ -23,8 +11,6 @@ from config import settings
 from models.rubric import ScoringRubric
 from models.score import CandidateScore, MatchLevel, RankedResult
 
-
-# ── Comparative summary prompt ────────────────────────────────────────────────
 
 SUMMARY_SYSTEM = """You are a senior HR analyst presenting hiring recommendations.
 Write a concise, honest, data-driven comparative analysis of the evaluated candidates.
@@ -46,7 +32,6 @@ def _generate_summary(
     rubric: ScoringRubric,
     top_candidates: list[CandidateScore],
 ) -> str:
-    """Generate a GPT-4o comparative narrative for the top candidates."""
     if not top_candidates:
         return "No candidates were successfully evaluated."
 
@@ -92,15 +77,7 @@ def _generate_summary(
         )
 
 
-# ── Main node function ────────────────────────────────────────────────────────
-
 def ranking_node(state: dict[str, Any]) -> dict[str, Any]:
-    """
-    LangGraph node: sort, filter, and summarise candidate scores.
-
-    Input state keys:  candidate_scores, scoring_rubric, parse_errors, scoring_errors
-    Output state keys: ranked_result, status
-    """
     candidate_scores: list[CandidateScore] = state.get("candidate_scores", [])
     rubric: ScoringRubric | None = state.get("scoring_rubric")
     parse_errors: dict[str, str] = state.get("parse_errors", {})

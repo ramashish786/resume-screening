@@ -1,25 +1,3 @@
-"""
-app.py
-───────
-Streamlit UI for the Resume Scoring Agent — with Persistent Resume Library.
-
-Screens:
-  1. Sidebar  — scoring weights, model info, resume library (select/remove/rename)
-  2. Upload   — new file upload + library selection + requirement input
-  3. Running  — live progress while agent runs
-  4. Results  — ranked leaderboard, score cards, evidence viewer
-
-Persistence:
-  • Every uploaded resume is saved to ./resume_library/ on disk.
-  • Resumes survive browser refreshes and server restarts.
-  • Users can remove individual resumes or clear the entire library.
-  • Previously stored resumes can be re-selected for any new scoring run
-    without re-uploading — just check them in the sidebar or the Library tab.
-
-Run with:
-    streamlit run app.py
-"""
-
 from __future__ import annotations
 
 import uuid
@@ -30,7 +8,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-# ── Page config (must be first Streamlit call) ────────────────────────────────
 st.set_page_config(
     page_title="Resume Scoring Agent",
     page_icon="🎯",
@@ -59,7 +36,6 @@ from resume_store import (
 from vector_store.chroma_client import delete_collection
 
 
-# ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
   .main-header{font-size:2.2rem;font-weight:700;margin-bottom:.2rem}
@@ -93,8 +69,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ── Session state ─────────────────────────────────────────────────────────────
-
 def _init():
     defaults: dict[str, Any] = {
         "session_id":                 uuid.uuid4().hex[:12],
@@ -124,8 +98,6 @@ def _init():
 
 _init()
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _badge(ext: str) -> str:
     css = f"ext-{ext}" if ext in {"pdf","docx","doc","pptx","ppt"} else "ext-pdf"
@@ -162,10 +134,6 @@ def _build_signature() -> str:
 
     return "\n".join(lines)
 
-
-# ═════════════════════════════════════════════════════════════════════════════
-#  SIDEBAR — library + weights + session
-# ═════════════════════════════════════════════════════════════════════════════
 
 def render_sidebar():
     with st.sidebar:
@@ -411,10 +379,6 @@ def _sidebar_resume_row(resume: dict):
     st.markdown('<hr class="thin">', unsafe_allow_html=True)
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  UPLOAD / MAIN SCREEN
-# ═════════════════════════════════════════════════════════════════════════════
-
 def render_upload_screen():
     st.markdown('<div class="main-header">🎯 Resume Scoring Agent</div>', unsafe_allow_html=True)
     st.markdown(
@@ -483,7 +447,6 @@ def _render_resume_sources():
 
     tab_new, tab_lib = st.tabs(["⬆️ Upload New", "📚 From Library"])
 
-    # ── Tab 1: Upload new ─────────────────────────────────────────────────────
     with tab_new:
         uploaded = st.file_uploader(
             "Drop resume files here",
@@ -526,7 +489,6 @@ def _render_resume_sources():
                     icon="💡",
                 )
 
-    # ── Tab 2: Select from library ────────────────────────────────────────────
     with tab_lib:
         resumes = get_all_resumes()
         if not resumes:
@@ -643,10 +605,6 @@ def _render_candidate_preview(file_dicts: list[dict]):
             st.markdown(f"{_badge(ext)} {name}", unsafe_allow_html=True)
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  AGENT TRIGGER
-# ═════════════════════════════════════════════════════════════════════════════
-
 def _run_agent(file_dicts: list[dict], requirement: str):
     st.session_state.is_running           = True
     st.session_state.agent_result         = None
@@ -654,10 +612,6 @@ def _run_agent(file_dicts: list[dict], requirement: str):
     st.session_state._pending_requirement = requirement
     st.rerun()
 
-
-# ═════════════════════════════════════════════════════════════════════════════
-#  RUNNING SCREEN
-# ═════════════════════════════════════════════════════════════════════════════
 
 STEPS = [
     ("📄 Parsing files",       "Extracting text from resumes…"),
@@ -699,10 +653,6 @@ def render_running_screen(file_dicts: list[dict], requirement: str):
     st.session_state._pending_requirement = None
     st.rerun()
 
-
-# ═════════════════════════════════════════════════════════════════════════════
-#  RESULTS SCREEN
-# ═════════════════════════════════════════════════════════════════════════════
 
 MATCH_CSS = {
     MatchLevel.STRONG:   "match-strong",
@@ -892,7 +842,6 @@ def _render_candidate_card(rank: int, c: CandidateScore, rubric_text: str = ""):
                     st.text(chunk[:600] + ("…" if len(chunk) > 600 else ""))
                     st.markdown("")
 
-        # ── Email compose ─────────────────────────────────────────────────
         st.divider()
         compose_key = f"compose_{c.file_name}"
 
@@ -1089,10 +1038,6 @@ def _results_df(candidates: list[CandidateScore]) -> pd.DataFrame:
         for i, c in enumerate(candidates, 1)
     ])
 
-
-# ═════════════════════════════════════════════════════════════════════════════
-#  MAIN LOOP
-# ═════════════════════════════════════════════════════════════════════════════
 
 def main():
     render_sidebar()

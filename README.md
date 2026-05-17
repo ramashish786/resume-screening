@@ -285,4 +285,5 @@ Email addresses and phone numbers are automatically extracted from each resume d
 ![alt text](image.png)
 ![alt text](image-1.png)
 ![alt text](image-2.png)
-
+![alt text](image-3.jpg)
+![alt text](image-4.jpg)

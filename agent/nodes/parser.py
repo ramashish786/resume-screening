@@ -1,21 +1,6 @@
-"""
-agent/nodes/parser.py
-──────────────────────
-File Parsing Node for the LangGraph agent.
-
-Responsibilities:
-  1. Iterate over uploaded_files in the state.
-  2. Detect file type and route to the correct parser.
-  3. Attempt to extract the candidate's name from the text.
-  4. Deduplicate by file hash.
-  5. Return parsed ResumeDocument objects + any parse errors.
-
-This node is intentionally fault-tolerant: a single corrupt file
-does not abort the pipeline — it's added to parse_errors and skipped.
-"""
-
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
@@ -25,35 +10,25 @@ from models.score import ResumeDocument
 from parsers import is_duplicate, parse_resume
 
 
-# ── Contact detail extraction helpers ────────────────────────────────────────
-
 def _extract_email(text: str) -> str | None:
-    """Extract the first email address found in the resume text."""
     match = re.search(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", text)
     return match.group(0).lower() if match else None
 
 
 def _extract_phone(text: str) -> str | None:
-    """
-    Extract the first phone number found in the resume text.
-    Handles common formats: +91-9999999999, (123) 456-7890, 123.456.7890, etc.
-    """
     match = re.search(
         r"(\+?\d{1,3}[\s\-.]?)?(\(?\d{3}\)?[\s\-.]?)?\d{3}[\s\-.]?\d{4,}",
         text,
     )
     if match:
         number = re.sub(r"\s+", " ", match.group(0).strip())
-        # Ignore very short matches that are likely years or zip codes
-        digits = re.sub(r"\D", "", number)
-        if len(digits) >= 7:
+        # reject short matches that are just years or zip codes
+        if len(re.sub(r"\D", "", number)) >= 7:
             return number
     return None
 
 
 def _extract_linkedin(text: str) -> str | None:
-    """Extract a LinkedIn URL or handle from the resume text."""
-    # Full URL
     match = re.search(
         r"(?:https?://)?(?:www\.)?linkedin\.com/in/[a-zA-Z0-9_\-%.]+",
         text,
@@ -61,30 +36,17 @@ def _extract_linkedin(text: str) -> str | None:
     )
     if match:
         return match.group(0).rstrip("/")
-    # Bare handle: "linkedin: john-doe" or "in/john-doe"
     match = re.search(r"linkedin[:\s]+([a-zA-Z0-9_\-%.]+)", text, re.IGNORECASE)
     if match:
         return f"linkedin.com/in/{match.group(1).strip()}"
     return None
 
 
-# ── Candidate name extraction helpers ────────────────────────────────────────
-
 def _extract_candidate_name(text: str, file_name: str) -> str:
-    """
-    Attempt to extract the candidate's name from the resume text.
-
-    Strategy (in order of preference):
-      1. First non-empty line of text (most resumes start with name).
-      2. Line matching "Name: ..." pattern.
-      3. Fall back to the file name without extension.
-    """
     lines = [l.strip() for l in text.split("\n") if l.strip()]
-
     if not lines:
         return _name_from_filename(file_name)
 
-    # Try pattern: "Name: John Doe" or "Name – John Doe"
     for line in lines[:10]:
         m = re.match(r"(?:Name|Candidate)[:\-–\s]+(.+)", line, re.IGNORECASE)
         if m:
@@ -92,7 +54,6 @@ def _extract_candidate_name(text: str, file_name: str) -> str:
             if 2 <= len(candidate.split()) <= 5:
                 return candidate.title()
 
-    # First line heuristic — must look like a name (2-4 words, no digits, not too long)
     first = lines[0]
     words = first.split()
     if (
@@ -107,26 +68,15 @@ def _extract_candidate_name(text: str, file_name: str) -> str:
 
 
 def _name_from_filename(file_name: str) -> str:
-    """Derive a human-readable name from the filename."""
-    import os
     stem = os.path.splitext(file_name)[0]
-    # Convert snake_case / kebab-case / CamelCase to Title Case
     stem = re.sub(r"[_\-]+", " ", stem)
     stem = re.sub(r"([a-z])([A-Z])", r"\1 \2", stem)
     return stem.strip().title() or "Unknown Candidate"
 
 
-# ── Main node function ────────────────────────────────────────────────────────
-
 def file_parsing_node(state: dict[str, Any]) -> dict[str, Any]:
-    """
-    LangGraph node: parse all uploaded files into ResumeDocument objects.
-
-    Input state keys:  uploaded_files, session_id
-    Output state keys: parsed_documents, parse_errors, status
-    """
     uploaded_files: list[dict] = state.get("uploaded_files", [])
-    logger.info(f"File Parsing Node: processing {len(uploaded_files)} file(s)")
+    logger.info(f"Parsing {len(uploaded_files)} file(s)")
 
     parsed_documents: list[ResumeDocument] = []
     parse_errors: dict[str, str] = {}
@@ -136,17 +86,15 @@ def file_parsing_node(state: dict[str, Any]) -> dict[str, Any]:
         file_bytes: bytes = upload["file_bytes"]
         file_name: str = upload["file_name"]
 
-        # Deduplication check
         is_dup, file_hash = is_duplicate(file_bytes, seen_hashes)
         if is_dup:
-            logger.warning(f"Duplicate file skipped: {file_name}")
+            logger.warning(f"Duplicate skipped: {file_name}")
             parse_errors[file_name] = "Duplicate file — already uploaded in this session."
             continue
         seen_hashes.add(file_hash)
 
         try:
             result = parse_resume(file_bytes, file_name)
-
             candidate_name = _extract_candidate_name(result["raw_text"], file_name)
 
             doc = ResumeDocument(
@@ -164,23 +112,16 @@ def file_parsing_node(state: dict[str, Any]) -> dict[str, Any]:
 
             if not doc.is_sufficient:
                 parse_errors[file_name] = (
-                    f"Insufficient text ({doc.word_count} words) — "
-                    "may be image-only. Results will be marked as low-confidence."
+                    f"Only {doc.word_count} words extracted — "
+                    "may be image-only. Score confidence will be low."
                 )
-                # Still include it — scorer will flag low confidence
 
             parsed_documents.append(doc)
-            logger.success(
-                f"Parsed: '{candidate_name}' from {file_name} ({doc.word_count} words)"
-            )
+            logger.info(f"Parsed '{candidate_name}' from {file_name} ({doc.word_count} words)")
 
         except Exception as e:
             logger.error(f"Failed to parse {file_name}: {e}")
             parse_errors[file_name] = str(e)
-
-    logger.info(
-        f"Parsing complete: {len(parsed_documents)} successful, {len(parse_errors)} errors"
-    )
 
     return {
         "parsed_documents": parsed_documents,

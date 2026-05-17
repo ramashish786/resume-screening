@@ -1,10 +1,3 @@
-"""
-parsers/pptx_parser.py
-───────────────────────
-Extracts text from .pptx resume/portfolio files using python-pptx.
-Iterates over all slides, text frames, and table cells.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -14,22 +7,11 @@ from loguru import logger
 
 try:
     from pptx import Presentation
-    from pptx.util import Pt
 except ImportError:
     Presentation = None  # type: ignore
 
 
 def parse_pptx(file_bytes: bytes, file_name: str) -> dict:
-    """
-    Extract text from a .pptx file.
-
-    Args:
-        file_bytes: Raw bytes of the uploaded PPTX.
-        file_name:  Original filename.
-
-    Returns:
-        dict with keys: raw_text, page_count, word_count, warnings, file_hash
-    """
     if Presentation is None:
         raise ImportError("python-pptx is not installed. Run: pip install python-pptx")
 

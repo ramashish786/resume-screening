@@ -1,15 +1,7 @@
-"""
-parsers/pdf_parser.py
-──────────────────────
-Extracts text from PDF resumes using pdfplumber.
-Handles multi-column layouts, tables, and scanned-PDF warnings.
-"""
-
 from __future__ import annotations
 
 import hashlib
 import io
-from typing import Union
 
 from loguru import logger
 
@@ -20,16 +12,6 @@ except ImportError:
 
 
 def parse_pdf(file_bytes: bytes, file_name: str) -> dict:
-    """
-    Extract text from a PDF file.
-
-    Args:
-        file_bytes: Raw bytes of the uploaded PDF.
-        file_name:  Original filename (for logging / metadata).
-
-    Returns:
-        dict with keys: raw_text, page_count, word_count, warnings, file_hash
-    """
     if pdfplumber is None:
         raise ImportError("pdfplumber is not installed. Run: pip install pdfplumber")
 

@@ -1,10 +1,3 @@
-"""
-parsers/docx_parser.py
-───────────────────────
-Extracts text from .docx resume files using python-docx.
-Handles paragraphs, tables, headers, and footers.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -19,16 +12,6 @@ except ImportError:
 
 
 def parse_docx(file_bytes: bytes, file_name: str) -> dict:
-    """
-    Extract text from a .docx file.
-
-    Args:
-        file_bytes: Raw bytes of the uploaded DOCX.
-        file_name:  Original filename.
-
-    Returns:
-        dict with keys: raw_text, page_count, word_count, warnings, file_hash
-    """
     if docx is None:
         raise ImportError("python-docx is not installed. Run: pip install python-docx")
 

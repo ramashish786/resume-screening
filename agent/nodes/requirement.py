@@ -1,22 +1,8 @@
-"""
-agent/nodes/requirement.py
-───────────────────────────
-Requirement Parser Node.
-
-Uses GPT-4o via LangChain to convert the user's free-text job requirement
-into a structured ScoringRubric Pydantic object.
-
-If parsing fails or produces low-confidence output, the node sets
-rubric_error in state and the pipeline can either abort or use
-a fallback keyword-based rubric.
-"""
-
 from __future__ import annotations
 
 import json
 from typing import Any
 
-from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from loguru import logger
@@ -25,8 +11,6 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from config import settings
 from models.rubric import ScoringRubric, ScoringWeights
 
-
-# ── Prompt ────────────────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """You are an expert HR analyst and technical recruiter.
 Your job is to parse a job requirement written in natural language and extract
@@ -66,15 +50,12 @@ Output JSON schema:
 }}"""
 
 
-# ── LLM call with retry ───────────────────────────────────────────────────────
-
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
     reraise=True,
 )
 def _call_llm(user_requirement: str) -> str:
-    """Call GPT-4o and return raw JSON string."""
     llm = ChatOpenAI(
         model=settings.llm_model,
         temperature=0.0,  # Deterministic for structured extraction
@@ -90,8 +71,6 @@ def _call_llm(user_requirement: str) -> str:
     response = chain.invoke({"user_requirement": user_requirement})
     return response.content
 
-
-# ── Fallback rubric from keywords ─────────────────────────────────────────────
 
 def _keyword_fallback_rubric(user_requirement: str) -> ScoringRubric:
     """
@@ -114,15 +93,7 @@ def _keyword_fallback_rubric(user_requirement: str) -> ScoringRubric:
     )
 
 
-# ── Main node function ────────────────────────────────────────────────────────
-
 def requirement_parser_node(state: dict[str, Any]) -> dict[str, Any]:
-    """
-    LangGraph node: parse user_requirement into a ScoringRubric.
-
-    Input state keys:  user_requirement
-    Output state keys: scoring_rubric, rubric_error, status
-    """
     user_requirement: str = state.get("user_requirement", "").strip()
     logger.info("Requirement Parser Node: parsing job requirement")
 
