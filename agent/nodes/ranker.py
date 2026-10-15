@@ -27,6 +27,7 @@ Write a 3-5 sentence comparative summary recommending who to prioritize and why.
 """
 
 
+# reraise=False so a summary failure doesn't kill the whole ranking result
 @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=1, max=5), reraise=False)
 def _generate_summary(
     rubric: ScoringRubric,
@@ -43,7 +44,7 @@ def _generate_summary(
         )
 
         scores_lines: list[str] = []
-        for i, c in enumerate(top_candidates[:5], 1):  # top 5 only
+        for i, c in enumerate(top_candidates[:5], 1):  # cap at 5 to keep the prompt short
             line = (
                 f"{i}. {c.candidate_name} — Overall: {c.overall_score:.1f}/100 "
                 f"({c.match_level.value}). "
@@ -106,6 +107,7 @@ def ranking_node(state: dict[str, Any]) -> dict[str, Any]:
             c for c in sorted_candidates
             if c.overall_score >= settings.min_score_threshold and not c.error
         ]
+        # if everyone is below threshold, summarise them all rather than returning nothing
         comparative_summary = _generate_summary(rubric, eligible or sorted_candidates)
     else:
         comparative_summary = "Rubric was not available — comparative summary skipped."
@@ -130,7 +132,7 @@ def ranking_node(state: dict[str, Any]) -> dict[str, Any]:
         candidates=sorted_candidates,
         comparative_summary=comparative_summary,
         rubric_used=rubric_summary,
-        total_processed=len(candidate_scores) + total_failed,
+        total_processed=len(candidate_scores)+len(parse_errors),
         total_failed=total_failed,
         no_match_count=no_match_count,
     )

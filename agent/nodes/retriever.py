@@ -35,7 +35,7 @@ def retrieval_node(state: dict[str, Any]) -> dict[str, Any]:
         f"Retrieval Node: fetching chunks for {len(parsed_documents)} candidate(s)"
     )
 
-    # Build the query string from the rubric and embed it once
+    # one embedding for all candidates — the rubric doesn't change between them
     query_string = rubric.to_query_string()
     logger.debug(f"Query string: {query_string[:120]}...")
 

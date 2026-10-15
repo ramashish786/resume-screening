@@ -14,10 +14,10 @@ class ScoringWeights(BaseModel):
     def weights_sum_to_one(self) -> "ScoringWeights":
         total = round(self.skills + self.experience + self.domain, 6)
         if abs(total - 1.0) > 0.01:
-            # LLM sometimes returns weights that don't sum to 1, normalise rather than crash
-            s, e, d = self.skills, self.experience, self.domain
+            s, e = self.skills, self.experience
             self.skills = round(s / total, 4)
             self.experience = round(e / total, 4)
+            # derive domain last so the three fields always sum to exactly 1.0
             self.domain = round(1 - self.skills - self.experience, 4)
         return self
 
@@ -40,6 +40,7 @@ class ScoringRubric(BaseModel):
     parser_confidence: float = Field(1.0, ge=0.0, le=1.0)
 
     def to_query_string(self) -> str:
+        # turns the rubric into a single string we can embed and query ChromaDB with
         parts: list[str] = []
         if self.domain:
             parts.append(f"Domain: {self.domain}.")

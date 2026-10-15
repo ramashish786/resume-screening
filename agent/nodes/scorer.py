@@ -150,10 +150,11 @@ def scoring_node(state: dict[str, Any]) -> dict[str, Any]:
         # Get retrieved chunks for this candidate
         chunks = retrieved_chunks_map.get(doc.file_hash, [])
         if not chunks:
-            chunks = [doc.raw_text[:2000]]  # last resort fallback
+            # shouldn't normally happen — retrieval node always sets a fallback too
+            chunks = [doc.raw_text[:2000]]
 
         try:
-            # Run scoring N times for self-consistency (N=1 for POC)
+            # scoring_runs > 1 averages multiple LLM calls to reduce variance
             raw_scores: list[dict] = []
             for run in range(settings.scoring_runs):
                 score_dict = _score_once(rubric, doc.candidate_name, chunks)
@@ -172,9 +173,9 @@ def scoring_node(state: dict[str, Any]) -> dict[str, Any]:
                 2,
             )
 
-            # Handle low-confidence resumes
             confidence = averaged.get("confidence", 1.0)
             if not doc.is_sufficient:
+                # cap confidence for thin resumes — the score is probably unreliable
                 confidence = min(confidence, 0.3)
 
             score = CandidateScore(
@@ -208,7 +209,7 @@ def scoring_node(state: dict[str, Any]) -> dict[str, Any]:
             logger.error(f"Scoring failed for '{doc.candidate_name}': {e}")
             scoring_errors[doc.file_name] = str(e)
 
-            # Add a zero-score entry so the candidate still appears in results
+            # still include the candidate in results so the UI can show an error card
             candidate_scores.append(
                 CandidateScore(
                     candidate_name=doc.candidate_name,

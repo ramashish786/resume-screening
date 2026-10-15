@@ -29,6 +29,7 @@ class ResumeDocument(BaseModel):
     @computed_field  # type: ignore[misc]
     @property
     def is_sufficient(self) -> bool:
+        # 80 words is a rough bar — below that it's likely a scanned image or corrupted file
         return self.word_count >= 80
 
 
@@ -60,6 +61,7 @@ class CandidateScore(BaseModel):
     @computed_field
     @property
     def match_level(self) -> MatchLevel:
+        # thresholds picked from trial runs — feel free to tune in settings if they feel off
         s = self.overall_score
         if s >= 75:
             return MatchLevel.STRONG
@@ -85,6 +87,7 @@ class CandidateScore(BaseModel):
     @computed_field
     @property
     def needs_manual_review(self) -> bool:
+        # confidence < 0.3 usually means the resume had very little usable text
         return self.confidence < 0.3 or self.error is not None
 
 

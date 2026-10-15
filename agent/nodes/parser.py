@@ -111,10 +111,14 @@ def file_parsing_node(state: dict[str, Any]) -> dict[str, Any]:
             )
 
             if not doc.is_sufficient:
-                parse_errors[file_name] = (
-                    f"Only {doc.word_count} words extracted — "
-                    "may be image-only. Score confidence will be low."
-                )
+                # parse_errors[file_name] = (
+                #     f"Only {doc.word_count} words extracted — "
+                #     "may be image-only. Score confidence will be low."
+                # )
+                doc.parse_warnings.append(
+                f"Only {doc.word_count} words extracted — "
+                "may be image-only. Score confidence will be low."
+                                         )
 
             parsed_documents.append(doc)
             logger.info(f"Parsed '{candidate_name}' from {file_name} ({doc.word_count} words)")

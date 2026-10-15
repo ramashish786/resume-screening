@@ -49,7 +49,7 @@ pip install -r requirements.txt
 ### 4. Configure environment
 
 ```bash
-cp .env.example .env
+cp .env .env
 # Edit .env and set your OPENAI_API_KEY
 ```
 
@@ -71,7 +71,7 @@ resume-agent/
 ├── config.py                     # Pydantic Settings (env-driven config)
 ├── email_sender.py               # Email drafting (GPT-4o) and SMTP sending
 ├── requirements.txt
-├── .env.example
+├── .env
 │
 ├── agent/
 │   ├── graph.py                  # LangGraph StateGraph + run_agent()

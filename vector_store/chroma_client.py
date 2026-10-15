@@ -38,6 +38,7 @@ def upsert_chunks(
 ) -> None:
     collection = get_or_create_collection(collection_name)
 
+    # deterministic IDs mean re-uploading the same file is idempotent
     ids = [f"{file_hash}_{i}" for i in range(len(chunks))]
     metadatas = [
         {
@@ -74,7 +75,7 @@ def query_collection(
 
     results = collection.query(
         query_embeddings=[query_embedding],
-        n_results=min(top_k, collection.count()),
+        n_results=min(top_k, collection.count()),  # chroma throws if you ask for more than exist
         where=where_filter,
         include=["documents", "distances"],
     )

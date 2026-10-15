@@ -25,6 +25,7 @@ def _load_registry() -> list[dict]:
 
 
 def _save_registry(registry: list[dict]) -> None:
+    # write to .tmp first then rename — avoids corruption if the process dies mid-write
     tmp = REGISTRY_PATH.with_suffix(".tmp")
     tmp.write_text(json.dumps(registry, indent=2, ensure_ascii=False), encoding="utf-8")
     tmp.replace(REGISTRY_PATH)
@@ -39,6 +40,7 @@ def add_resume(file_bytes: bytes, file_name: str) -> dict:
     registry  = _load_registry()
 
     # Dedup check
+    # same file uploaded twice — just return the existing record
     existing = next((r for r in registry if r["file_hash"] == file_hash), None)
     if existing:
         return existing

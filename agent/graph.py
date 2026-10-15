@@ -70,9 +70,7 @@ def build_graph() -> Any:
         },
     )
 
-    # indexing and requirement_parsing can run in sequence
-    # (requirement parsing doesn't depend on indexing being complete,
-    #  but I have kept it sequential for simplicity)
+ 
     graph.add_edge("indexing", "requirement_parsing")
     graph.add_conditional_edges(
         "requirement_parsing",
@@ -105,7 +103,7 @@ def run_agent(
     session_id: str | None = None,
 ) -> AgentState:
     if session_id is None:
-        session_id = uuid.uuid4().hex[:12]
+        session_id = uuid.uuid4().hex[:12]  # short enough to use in collection names
 
     collection_name = f"resumes_{session_id}"
 
@@ -139,6 +137,10 @@ def run_agent(
         return final_state
     except Exception as e:
         logger.error(f"Agent failed | session={session_id}: {e}")
+        # return the initial state with error info so the caller always gets something back
         initial_state["status"] = "error"
         initial_state["fatal_error"] = str(e)
         return initial_state
+if __name__=="__main__":
+    app = build_graph()
+    print(app.get_graph().print_ascii())

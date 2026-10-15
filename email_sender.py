@@ -43,6 +43,7 @@ def draft_outreach_email(
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_openai import ChatOpenAI
 
+    # higher temperature than scoring — we want the email to sound natural, not robotic
     llm = ChatOpenAI(
         model=settings.llm_model,
         temperature=0.7,
@@ -82,6 +83,7 @@ def draft_outreach_email(
 
     raw = response.content.strip()
 
+    # default in case the model ignores the format instructions
     subject = f"Exciting opportunity for {candidate.candidate_name}"
     body    = raw
 

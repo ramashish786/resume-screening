@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     chroma_persist_dir: str = Field("./chroma_db")
 
+    # defaults are for Gmail — for Outlook use smtp.office365.com:587
     smtp_host: str = Field("smtp.gmail.com")
     smtp_port: int = Field(587)
     smtp_user: str = Field("")

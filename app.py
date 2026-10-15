@@ -705,11 +705,12 @@ def render_results_screen(state: dict[str, Any]):
         )
         st.markdown("")
 
-    m1, m2, m3, m4 = st.columns(4)
+    m1, m2, m3, m4 , m5 = st.columns(5)
     m1.metric("Evaluated",      ranked.total_processed)
     m2.metric("Strong (≥75)",   sum(1 for c in ranked.candidates if c.overall_score >= 75))
     m3.metric("Good (≥55)",     sum(1 for c in ranked.candidates if 55 <= c.overall_score < 75))
-    m4.metric("No match (<30)", ranked.no_match_count)
+    m4.metric("bad (≥30)",     sum(1 for c in ranked.candidates if 30 <= c.overall_score < 55))
+    m5.metric("No match (>30)", ranked.no_match_count)
 
     st.divider()
 
